@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: elasticworker-custommetrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-metric-db
+  namespace: elasticworker-custommetrics
+spec:
+  selector:
+    matchLabels:
+      redis: redis-metric-db
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        redis: redis-metric-db
+    spec:
+      containers:
+      - name: redis-metric-db
+        image: redis:latest
+        command: ['redis-server']
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    name: redis-metric-db
+  name: redis-metric-db
+  namespace: elasticworker-custommetrics
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    redis: redis-metric-db

@@ -1,0 +1,1 @@
+# elastic-worker-custommetrics-adapter

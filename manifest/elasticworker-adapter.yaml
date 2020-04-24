@@ -1,0 +1,152 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: elasticworker-custommetrics:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: elasticworker-custommetrics-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: elasticworker-custommetrics-apiserver
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticworker-custommetrics-apiserver
+  template:
+    metadata:
+      labels:
+        app: elasticworker-custommetrics-apiserver
+      name: elasticworker-custommetrics-apiserver
+    spec:
+      serviceAccountName: elasticworker-custommetrics-apiserver
+      containers:
+      - name: elasticworker-custommetrics-apiserver
+        image: elasticworker-custommetric-adapter:0.1
+        args:
+        - --secure-port=6443
+        - --logtostderr=true
+        - --v=10
+        - --redishost=redis-metric-db
+        ports:
+        - containerPort: 6443
+          name: https
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - mountPath: /tmp
+          name: temp-vol
+      volumes:
+      - name: temp-vol
+        emptyDir: {}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: elasticworker-custommetrics-resource-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: elasticworker-custommetrics-resource-reader
+subjects:
+- kind: ServiceAccount
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticworker-custommetrics-apiserver
+  namespace: elasticworker-custommetrics
+spec:
+  ports:
+  - name: https
+    port: 443
+    targetPort: 6443
+  - name: http
+    port: 80
+    targetPort: 8080
+  selector:
+    app: elasticworker-custommetrics-apiserver
+---
+apiVersion: apiregistration.k8s.io/v1beta1
+kind: APIService
+metadata:
+  name: v1beta2.custom.metrics.k8s.io
+spec:
+  service:
+    name: elasticworker-custommetrics-apiserver
+    namespace: elasticworker-custommetrics
+  group: custom.metrics.k8s.io
+  version: v1beta2
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: elasticworker-custommetrics-server-resources
+rules:
+- apiGroups:
+  - custom.metrics.k8s.io
+  resources: ["*"]
+  verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: elasticworker-custommetrics-resource-reader
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - namespaces
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hpa-controller-elasticworker-custommetrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: elasticworker-custommetrics-server-resources
+subjects:
+- kind: ServiceAccount
+  name: horizontal-pod-autoscaler
+  namespace: kube-system
